@@ -1,0 +1,904 @@
+{
+  "info": {
+    "name": "SIKopDes KD5 — REST API",
+    "description": "Jalankan berurutan melalui Collection Runner. Request tambah/ubah/bayar mengubah data aplikasi, lalu menutup plafon percobaan di akhir alur. PDF dan tabel interaktif diuji melalui web.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "anggotaId",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const jakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);",
+          "const transaction = new Date(jakarta.getTime() - 60 * 1000);",
+          "const due = new Date(jakarta.getTime() + 3 * 24 * 60 * 60 * 1000);",
+          "pm.collectionVariables.set(\"tanggalTransaksi\", transaction.toISOString().slice(0, 19));",
+          "pm.collectionVariables.set(\"tanggalBayar\", jakarta.toISOString().slice(0, 10));",
+          "pm.collectionVariables.set(\"tanggalJatuhTempo\", due.toISOString().slice(0, 10));",
+          "pm.collectionVariables.set(\"tahun\", jakarta.getUTCFullYear());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 · Ringkasan beranda",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/dashboard"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Anggota",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/anggota"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"members\", JSON.stringify(result.data));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Daftar plafon dan pilih anggota yang belum memiliki plafon",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "const members = JSON.parse(pm.collectionVariables.get(\"members\"));",
+              "const free = members.find(a => a.statusKeanggotaan === \"Aktif\" && !result.data.some(p => p.anggotaId === a.id && p.status !== \"Ditutup\"));",
+              "pm.test(\"Ada anggota yang memenuhi syarat\", () => pm.expect(free).to.exist);",
+              "if (free) pm.collectionVariables.set(\"anggotaId\", free.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Buat plafon",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"anggotaId\": \"{{anggotaId}}\",\n  \"limitPlafon\": 1000000\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(201); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"plafonId\",result.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Detail plafon",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/{{plafonId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Ubah limit plafon",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/update",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{plafonId}}\",\n  \"limitPlafon\": 1500000,\n  \"status\": \"Aktif\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 · Catat klaim",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"plafonId\": \"{{plafonId}}\",\n  \"tanggalTransaksi\": \"{{tanggalTransaksi}}\",\n  \"nominalKlaim\": 100000,\n  \"kategori\": \"Sembako\",\n  \"keterangan\": \"Belanja dari pengujian Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(201); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"klaimId\",result.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 · Catat klaim",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"plafonId\": \"{{plafonId}}\",\n  \"tanggalTransaksi\": \"{{tanggalTransaksi}}\",\n  \"nominalKlaim\": 200000,\n  \"kategori\": \"Sembako\",\n  \"keterangan\": \"Belanja dari pengujian Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(201); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"klaimLainId\",result.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 · Daftar klaim",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 · Detail klaim",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim/{{klaimId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 · Ubah klaim",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim/update",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{klaimId}}\",\n  \"tanggalTransaksi\": \"{{tanggalTransaksi}}\",\n  \"nominalKlaim\": 125000,\n  \"kategori\": \"Kebutuhan Rumah Tangga\",\n  \"keterangan\": \"Koreksi rincian transaksi\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 · Terbitkan tagihan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"anggotaId\": \"{{anggotaId}}\",\n  \"tanggalJatuhTempo\": \"{{tanggalJatuhTempo}}\",\n  \"klaimIds\": [\n    \"{{klaimId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(201); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"tagihanId\",result.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 · Daftar tagihan",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 · Detail tagihan",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/{{tagihanId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 · Tambahkan klaim lain pada tagihan",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/update-klaim",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{tagihanId}}\",\n  \"klaimIds\": [\n    \"{{klaimId}}\",\n    \"{{klaimLainId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 · Batalkan tagihan sebelum dibayar",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/{{tagihanId}}/delete"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 · Tagih ulang satu klaim",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"anggotaId\": \"{{anggotaId}}\",\n  \"tanggalJatuhTempo\": \"{{tanggalJatuhTempo}}\",\n  \"klaimIds\": [\n    \"{{klaimId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(201); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });",
+              "pm.collectionVariables.set(\"tagihanId\",result.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 · Cicilan pertama",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/bayar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{tagihanId}}\",\n  \"nominalPembayaran\": 25000,\n  \"tanggalBayar\": \"{{tanggalBayar}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 · Penolakan pembayaran berlebih",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/bayar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{tagihanId}}\",\n  \"nominalPembayaran\": 100001,\n  \"tanggalBayar\": \"{{tanggalBayar}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(400); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 · Pelunasan",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/bayar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{tagihanId}}\",\n  \"nominalPembayaran\": 100000,\n  \"tanggalBayar\": \"{{tanggalBayar}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 · Batalkan klaim yang tidak jadi ditagih",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/klaim/{{klaimLainId}}/delete"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 · Tutup plafon",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/{{plafonId}}/close"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 · Tagihan prioritas",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/jatuh-tempo"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 · Statistik bulanan",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/statistik?period=bulanan&year={{tahun}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 · Statistik kuartalan",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/tagihan/statistik?period=kuartal&year={{tahun}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(200); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 · Penolakan perubahan plafon final",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/update",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{plafonId}}\",\n  \"limitPlafon\": 1000000,\n  \"status\": \"Aktif\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(400); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 · Data tidak ditemukan",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/plafon/TIDAK_ADA"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+              "const result = pm.response.json();",
+              "pm.test(\"Response envelope\", () => { pm.expect(result.status).to.eql(404); pm.expect(result).to.have.all.keys(\"status\", \"message\", \"timestamp\", \"data\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

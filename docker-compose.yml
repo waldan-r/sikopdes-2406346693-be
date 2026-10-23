@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sikopdes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sikopdes
+      POSTGRES_USER: sikopdes
+      POSTGRES_PASSWORD: sikopdes
+    ports:
+      - "15433:5432"
+    volumes:
+      - sikopdes-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sikopdes -d sikopdes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sikopdes-postgres-data:
